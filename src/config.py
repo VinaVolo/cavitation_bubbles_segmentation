@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     streamlit_port: int = Field(default=8501)
     secret_key: str = Field(min_length=16)
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 @lru_cache
