@@ -42,8 +42,24 @@ class VideoProcessor:
             fps = cap.get(cv2.CAP_PROP_FPS)
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
+
+            ffmpeg_cmd = [
+                "ffmpeg",
+                "-y",
+                "-f", "rawvideo",
+                "-vcodec", "rawvideo",
+                "-pix_fmt", "bgr24",
+                "-s", f"{width}x{height}",
+                "-r", str(fps),
+                "-i", "-",
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-pix_fmt", "yuv420p",
+                output_video_path,
+            ]
+            ffmpeg_proc = subprocess.Popen(
+                ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
 
             with open(csv_path, mode="w", newline="") as csv_file:
                 csv_writer = csv.writer(csv_file)
@@ -91,21 +107,20 @@ class VideoProcessor:
 
                         csv_writer.writerow([trk.id, frame_idx, timestamp, cx, cy, area, detection_class, speed])
 
-                    out.write(annotated_frame)
+                    ffmpeg_proc.stdin.write(annotated_frame.tobytes())
                     frame_idx += 1
 
         finally:
-            out.release()
+            if ffmpeg_proc.stdin:
+                ffmpeg_proc.stdin.close()
+            ffmpeg_proc.wait()
             cap.release()
 
-        logger.info("Processed %d frames from %s", frame_idx, input_video_path)
+        if ffmpeg_proc.returncode != 0:
+            stderr = ffmpeg_proc.stderr.read().decode() if ffmpeg_proc.stderr else ""
+            raise RuntimeError(f"ffmpeg encoding failed: {stderr}")
 
-        h264_path = output_video_path + ".h264.mp4"
-        subprocess.run(
-            ["ffmpeg", "-i", output_video_path, "-c:v", "libx264", "-preset", "fast", "-y", h264_path],
-            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
-        os.replace(h264_path, output_video_path)
+        logger.info("Processed %d frames from %s", frame_idx, input_video_path)
 
         return _generate_histograms(tracker, hist_folder)
 

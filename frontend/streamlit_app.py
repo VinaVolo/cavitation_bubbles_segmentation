@@ -1,7 +1,8 @@
-import base64
+import io
 import os
 import subprocess
 import tempfile
+import zipfile
 
 import requests
 import streamlit as st
@@ -249,30 +250,22 @@ if uploaded_file is not None:
             progress.progress(90, text="Decoding results…")
 
             if response.status_code == 200:
-                result = response.json()
-                video_data = base64.b64decode(result["output_video"])
-                csv_data = base64.b64decode(result["csv_file"])
+                zf = zipfile.ZipFile(io.BytesIO(response.content))
+                video_data = zf.read("output_video.mp4")
+                csv_data = zf.read("data.csv")
 
-                speed_hist = (
-                    base64.b64decode(result["speed_hist_file"])
-                    if result.get("speed_hist_file")
-                    else None
-                )
-                area_hist = (
-                    base64.b64decode(result["area_hist_file"])
-                    if result.get("area_hist_file")
-                    else None
-                )
+                speed_hist = zf.read("histogram_speed.png") if "histogram_speed.png" in zf.namelist() else None
+                area_hist = zf.read("histogram_area.png") if "histogram_area.png" in zf.namelist() else None
 
                 st.session_state.processing_result = {
                     "video_data": video_data,
                     "csv_data": csv_data,
-                    "csv_name": result["csv_file_name"],
-                    "video_name": result["output_video_name"],
+                    "csv_name": "data.csv",
+                    "video_name": "output_video.mp4",
                     "speed_hist": speed_hist,
-                    "speed_hist_name": result.get("speed_hist_name"),
+                    "speed_hist_name": "histogram_speed.png",
                     "area_hist": area_hist,
-                    "area_hist_name": result.get("area_hist_name"),
+                    "area_hist_name": "histogram_area.png",
                 }
                 progress.progress(100, text="Done!")
             else:
