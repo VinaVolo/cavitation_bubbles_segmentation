@@ -92,8 +92,8 @@ if "processing_result" not in st.session_state:
     st.session_state.processing_result = None
 
 
-# ── Helper: convert non-MP4 to MP4 for preview ──
-def _convert_to_mp4(video_bytes: bytes, ext: str) -> bytes | None:
+# ── Helper: lightweight preview (3s, 480p) ──
+def _make_preview(video_bytes: bytes, ext: str) -> bytes | None:
     tmp_orig_path = None
     tmp_preview_path = None
     try:
@@ -105,7 +105,10 @@ def _convert_to_mp4(video_bytes: bytes, ext: str) -> bytes | None:
         subprocess.run(
             [
                 "ffmpeg", "-i", tmp_orig_path,
-                "-c:v", "libx264", "-preset", "fast", "-y",
+                "-t", "3",
+                "-vf", "scale=-2:480",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+                "-an", "-y",
                 tmp_preview_path,
             ],
             check=True,
@@ -214,13 +217,9 @@ with col_preview:
         st.markdown("#### Preview")
         video_bytes = uploaded_file.getvalue()
         ext = uploaded_file.name.rsplit(".", 1)[-1].lower()
-
-        if ext != "mp4":
-            preview = _convert_to_mp4(video_bytes, ext)
-            if preview:
-                st.video(preview)
-        else:
-            st.video(video_bytes)
+        preview = _make_preview(video_bytes, ext)
+        if preview:
+            st.video(preview)
 
 # ── Process button ──
 if uploaded_file is not None:
