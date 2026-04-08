@@ -72,6 +72,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model_name", type=str, default=None, help="Model filename (default: from config/models.yaml)")
     parser.add_argument("--epochs", type=int, default=100, help="Number of epochs (default: 100)")
     parser.add_argument("--batch", type=int, default=16, help="Batch size (default: 16)")
+    parser.add_argument("--weight_decay", type=float, default=0.0005, help="L2 regularization (default: 0.0005)")
+    parser.add_argument("--dropout", type=float, default=0.0, help="Dropout rate (default: 0.0)")
     return parser.parse_args()
 
 
@@ -98,6 +100,8 @@ def main() -> None:
     model_cfg.pop("model", None)
     model_cfg["epochs"] = args.epochs
     model_cfg["batch"] = args.batch
+    model_cfg["weight_decay"] = args.weight_decay
+    model_cfg["dropout"] = args.dropout
     run_name = args.task_name or f"{model_name.removesuffix('.pt')}_v{dataset_version}"
 
     task = Task.init(
@@ -126,7 +130,8 @@ def main() -> None:
         **model_cfg,
     )
 
-    hyperparams_path = os.path.join("models", "trained", run_name, "hyperparams.yaml")
+    save_dir = model.trainer.save_dir
+    hyperparams_path = os.path.join(save_dir, "hyperparams.yaml")
     with open(hyperparams_path, "w") as f:
         yaml.dump(dict(vars(model.trainer.args)), f, default_flow_style=False, sort_keys=False)
     logger.info("Hyperparameters saved to %s", hyperparams_path)
