@@ -257,15 +257,17 @@ if uploaded_file is not None:
                 speed_hist = zf.read("histogram_speed.png") if "histogram_speed.png" in zf.namelist() else None
                 area_hist = zf.read("histogram_area.png") if "histogram_area.png" in zf.namelist() else None
 
+                base_name = os.path.splitext(uploaded_file.name)[0]
+
                 st.session_state.processing_result = {
                     "video_data": video_data,
                     "csv_data": csv_data,
-                    "csv_name": "data.csv",
-                    "video_name": "output_video.mp4",
+                    "csv_name": f"{base_name}.csv",
+                    "video_name": f"{base_name}_processed.mp4",
                     "speed_hist": speed_hist,
-                    "speed_hist_name": "histogram_speed.png",
+                    "speed_hist_name": f"{base_name}_speed.png",
                     "area_hist": area_hist,
-                    "area_hist_name": "histogram_area.png",
+                    "area_hist_name": f"{base_name}_area.png",
                 }
                 progress.progress(100, text="Done!")
             else:
