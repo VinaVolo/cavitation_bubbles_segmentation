@@ -50,9 +50,11 @@ def _on_train_epoch_end(trainer: Any) -> None:
     if not task:
         return
     for k, v in trainer.label_loss_items(trainer.tloss, prefix="train").items():
-        task.get_logger().report_scalar(k, "results", v, iteration=trainer.epoch)
+        if v:
+            task.get_logger().report_scalar(k, "results", v, iteration=trainer.epoch)
     for k, v in trainer.lr.items():
-        task.get_logger().report_scalar(f"lr/{k}", "results", v, iteration=trainer.epoch)
+        if v:
+            task.get_logger().report_scalar(f"lr/{k}", "results", v, iteration=trainer.epoch)
 
 
 def _on_fit_epoch_end(trainer: Any) -> None:
@@ -60,7 +62,8 @@ def _on_fit_epoch_end(trainer: Any) -> None:
     if not task:
         return
     for k, v in trainer.metrics.items():
-        task.get_logger().report_scalar(k, "results", v, iteration=trainer.epoch)
+        if v:
+            task.get_logger().report_scalar(k, "results", v, iteration=trainer.epoch)
 
     # Report all metrics (including mask and loss) to Ray Tune
     ray_metrics = dict(trainer.metrics)
