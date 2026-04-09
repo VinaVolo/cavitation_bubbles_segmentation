@@ -83,7 +83,8 @@ def _upload_plots(trainer: Any, task: Task) -> None:
             plt.close(fig)
     for k, v in trainer.validator.metrics.results_dict.items():
         if isinstance(v, (int, float)):
-            task.get_logger().report_single_value(f"val/{k}", round(v, 3))
+            title = f"val/\n{k.replace('/', '/\n')}"
+            task.get_logger().report_single_value(title, round(v, 3))
 
 
 def _on_train_end(trainer: Any) -> None:
@@ -146,7 +147,8 @@ def train_yolo(
     for k, v in test_metrics.results_dict.items():
         if isinstance(v, (int, float)):
             rounded = round(v, 3)
-            clearml_logger.report_single_value(f"test/{k}", rounded)
+            title = f"test/\n{k.replace('/', '/\n')}"
+            clearml_logger.report_single_value(title, rounded)
             logger.info("test/%s: %.3f", k, rounded)
 
     task.flush(wait_for_uploads=True)
@@ -161,6 +163,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--metric", type=str, default="val/seg_loss", help="Metric to optimize (default: val/seg_loss)")
     parser.add_argument("--mode", type=str, default="min", choices=["min", "max"], help="Optimization direction (default: min)")
     parser.add_argument("--tags", type=str, nargs="*", default=[], help="Additional ClearML tags")
+    parser.add_argument("--data", type=str, default="data/data.yaml", help="Path to dataset YAML (default: data/data.yaml)")
     return parser.parse_args()
 
 
@@ -205,7 +208,7 @@ def main() -> None:
 
     run_name = f"{model_name.removesuffix('.pt')}-v{dataset_version}-raytune"
 
-    dataset_path = str(Path("data", "data.yaml").resolve())
+    dataset_path = str(Path(args.data).resolve())
     model_path = str(Path("models", "base", model_name).resolve())
 
     if not Path(model_path).exists():

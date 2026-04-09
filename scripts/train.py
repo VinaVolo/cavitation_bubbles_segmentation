@@ -65,7 +65,8 @@ def on_train_end(trainer) -> None:
             plt.close(fig)
     for k, v in trainer.validator.metrics.results_dict.items():
         if isinstance(v, (int, float)):
-            task.get_logger().report_single_value(f"val/{k}", round(v, 3))
+            title = f"val/\n{k.replace('/', '/\n')}"
+            task.get_logger().report_single_value(title, round(v, 3))
 
 
 def parse_args() -> argparse.Namespace:
@@ -76,6 +77,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch", type=int, default=16, help="Batch size (default: 16)")
     parser.add_argument("--weight_decay", type=float, default=0.0005, help="L2 regularization (default: 0.0005)")
     parser.add_argument("--dropout", type=float, default=0.0, help="Dropout rate (default: 0.0)")
+    parser.add_argument("--data", type=str, default="data/data.yaml", help="Path to dataset YAML (default: data/data.yaml)")
     return parser.parse_args()
 
 
@@ -113,7 +115,7 @@ def main() -> None:
         output_uri=False,
     )
     logger.info("ClearML Task created: %s", task.id)
-    dataset_path = os.path.join("data", "data.yaml")
+    dataset_path = args.data
 
     model_path = os.path.join("models", "base", model_name)
     logger.info("Loading model from %s", model_path)
@@ -142,7 +144,8 @@ def main() -> None:
     test_results = model.val(data=dataset_path, split="test", device=device)
     for k, v in test_results.results_dict.items():
         if isinstance(v, (int, float)):
-            task.get_logger().report_single_value(f"test/{k}", round(v, 3))
+            title = f"test/\n{k.replace('/', '/\n')}"
+            task.get_logger().report_single_value(title, round(v, 3))
 
 
 if __name__ == "__main__":
