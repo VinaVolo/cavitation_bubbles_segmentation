@@ -18,7 +18,7 @@ router = APIRouter()
 MAX_UPLOAD_SIZE_MB = 500
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".wmv"}
 
-MODEL_PATH = "hf_model_repo/model.pt"
+MODEL_PATH = "models/trained/yolo26x_train/weights/best.pt"
 video_processor = VideoProcessor(MODEL_PATH)
 
 
