@@ -198,3 +198,6 @@ slurm_logs/
 # sub folders
 /uploads
 /outputs
+
+# Claude Code
+CLAUDE.md
