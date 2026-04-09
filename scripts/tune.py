@@ -96,7 +96,7 @@ def main() -> None:
         secret=project_settings.clearml_api_secret_key,
     )
 
-    ray_tmp = Path("models", "tmp").resolve()
+    ray_tmp = Path(Path.home(), "ray_tmp")
     ray_tmp.mkdir(parents=True, exist_ok=True)
     ray.init(_temp_dir=str(ray_tmp))
 
