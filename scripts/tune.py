@@ -44,24 +44,28 @@ def _build_search_space(space_cfg: dict[str, list[float]]) -> dict[str, tune.sam
     return result
 
 
-def train_yolo(config: dict[str, Any], model_path: str, dataset_path: str, device: str, base_cfg: dict[str, Any]) -> None:
+def train_yolo(config: dict[str, Any], model_path: str, dataset_path: str, base_cfg: dict[str, Any]) -> None:
     """Training function executed by each Ray Tune trial."""
+    import os
+
+    gpu_ids = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+    device = f"cuda:0" if gpu_ids else "cpu"
     model = YOLO(model_path, task="segment")
 
     train_kwargs = {**base_cfg, **config}
 
     def _report_metrics(trainer: Any) -> None:
         metrics = trainer.metrics
-        tune_report({
-            "map50": metrics.get("metrics/mAP50(B)", 0.0),
-            "map50_95": metrics.get("metrics/mAP50-95(B)", 0.0),
-            "map50_mask": metrics.get("metrics/mAP50(M)", 0.0),
-            "map50_95_mask": metrics.get("metrics/mAP50-95(M)", 0.0),
-            "val_box_loss": metrics.get("val/box_loss", 0.0),
-            "val_seg_loss": metrics.get("val/seg_loss", 0.0),
-            "val_cls_loss": metrics.get("val/cls_loss", 0.0),
-            "epoch": trainer.epoch,
-        })
+        tune_report(
+            map50=metrics.get("metrics/mAP50(B)", 0.0),
+            map50_95=metrics.get("metrics/mAP50-95(B)", 0.0),
+            map50_mask=metrics.get("metrics/mAP50(M)", 0.0),
+            map50_95_mask=metrics.get("metrics/mAP50-95(M)", 0.0),
+            val_box_loss=metrics.get("val/box_loss", 0.0),
+            val_seg_loss=metrics.get("val/seg_loss", 0.0),
+            val_cls_loss=metrics.get("val/cls_loss", 0.0),
+            epoch=trainer.epoch,
+        )
 
     model.add_callback("on_fit_epoch_end", _report_metrics)
 
@@ -151,7 +155,6 @@ def main() -> None:
         train_yolo,
         model_path=model_path,
         dataset_path=dataset_path,
-        device=device,
         base_cfg=dict(tune_cfg),
     )
     trainable_with_resources = tune.with_resources(
