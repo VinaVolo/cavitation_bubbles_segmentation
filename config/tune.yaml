@@ -1,12 +1,12 @@
 model: yolo26x-seg.pt
 epochs: 50
 seed: 42
-batch: 16
+batch: 32
 imgsz: 640
-plots: false
+plots: true
 save: true
 val: true
-verbose: false
+verbose: true
 
 ray:
   num_samples: 50

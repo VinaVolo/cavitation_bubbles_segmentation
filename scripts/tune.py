@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
 import ray
 import torch
 import yaml
@@ -43,12 +46,74 @@ def _build_search_space(space_cfg: dict[str, list[float]]) -> dict[str, tune.sam
     return result
 
 
-def train_yolo(config: dict[str, Any], model_path: str, dataset_path: str, base_cfg: dict[str, Any]) -> None:
+def _on_train_epoch_end(trainer: Any) -> None:
+    task = Task.current_task()
+    if not task:
+        return
+    for k, v in trainer.label_loss_items(trainer.tloss, prefix="train").items():
+        task.get_logger().report_scalar(k, "results", v, iteration=trainer.epoch)
+    for k, v in trainer.lr.items():
+        task.get_logger().report_scalar(f"lr/{k}", "results", v, iteration=trainer.epoch)
+
+
+def _on_fit_epoch_end(trainer: Any) -> None:
+    task = Task.current_task()
+    if not task:
+        return
+    for k, v in trainer.metrics.items():
+        task.get_logger().report_scalar(k, "results", v, iteration=trainer.epoch)
+
+
+def _on_train_end(trainer: Any) -> None:
+    task = Task.current_task()
+    if not task:
+        return
+    for f in [*trainer.plots.keys(), *trainer.validator.plots.keys()]:
+        if "batch" not in f.name and f.exists():
+            img = mpimg.imread(str(f))
+            fig = plt.figure()
+            ax = fig.add_axes([0, 0, 1, 1], frameon=False, aspect="auto", xticks=[], yticks=[])
+            ax.imshow(img)
+            task.get_logger().report_matplotlib_figure(
+                title=f.stem, series="", figure=fig, report_interactive=False,
+            )
+            plt.close(fig)
+    for k, v in trainer.validator.metrics.results_dict.items():
+        task.get_logger().report_single_value(f"val/{k}", v)
+
+
+def train_yolo(
+    config: dict[str, Any],
+    model_path: str,
+    dataset_path: str,
+    base_cfg: dict[str, Any],
+    clearml_credentials: dict[str, str],
+    clearml_project: str,
+    parent_task_id: str,
+    run_name: str,
+) -> None:
     """Training function executed by each Ray Tune trial."""
     gpu_ids = ray.get_gpu_ids()
     device = int(gpu_ids[0]) if gpu_ids else "cpu"
     logger.info("Trial assigned GPU: %s, using device=%s", gpu_ids, device)
+
+    Task.set_credentials(**clearml_credentials)
+    trial_id = tune.get_context().get_trial_id()
+    task = Task.init(
+        project_name=clearml_project,
+        task_name=f"{run_name}/trial_{trial_id}",
+        auto_connect_frameworks={"pytorch": False, "matplotlib": False},
+        output_uri=False,
+    )
+    task.set_parent(parent_task_id)
+    task.connect(config, name="hyperparameters")
+
+    ultra_settings.update({"runs_dir": "models/tuned", "tensorboard": False, "clearml": False, "wandb": False})
+
     model = YOLO(model_path, task="segment")
+    model.add_callback("on_train_epoch_end", _on_train_epoch_end)
+    model.add_callback("on_fit_epoch_end", _on_fit_epoch_end)
+    model.add_callback("on_train_end", _on_train_end)
 
     train_kwargs = {**base_cfg, **config}
 
@@ -56,9 +121,11 @@ def train_yolo(config: dict[str, Any], model_path: str, dataset_path: str, base_
         data=dataset_path,
         device=device,
         project="models/tuned",
-        name="trial",
+        name=f"trial_{trial_id}",
         **train_kwargs,
     )
+
+    task.close()
 
 
 def parse_args() -> argparse.Namespace:
@@ -83,12 +150,19 @@ def main() -> None:
         secret=project_settings.clearml_api_secret_key,
     )
 
-    import os
     os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
 
     ray_tmp = Path(Path.home(), "ray_tmp")
     ray_tmp.mkdir(parents=True, exist_ok=True)
     ray.init(_temp_dir=str(ray_tmp))
+
+    clearml_credentials = {
+        "web_host": project_settings.clearml_web_host,
+        "api_host": project_settings.clearml_api_host,
+        "files_host": project_settings.clearml_files_host,
+        "key": project_settings.clearml_api_access_key,
+        "secret": project_settings.clearml_api_secret_key,
+    }
 
     ultra_settings.update({"runs_dir": "models/tuned", "tensorboard": False, "clearml": False, "wandb": False})
 
@@ -142,6 +216,10 @@ def main() -> None:
         model_path=model_path,
         dataset_path=dataset_path,
         base_cfg=dict(tune_cfg),
+        clearml_credentials=clearml_credentials,
+        clearml_project=project_settings.clearml_project,
+        parent_task_id=task.id,
+        run_name=run_name,
     )
     trainable_with_resources = tune.with_resources(
         trainable,
