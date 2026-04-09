@@ -1,0 +1,146 @@
+import argparse
+import logging
+import os
+
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+import torch
+import yaml
+from clearml import Task
+from ultralytics import YOLO
+from ultralytics import settings as ultra_settings
+
+from src.config import get_settings, load_model_config
+
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logging.getLogger("matplotlib").setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
+
+
+def get_device() -> str:
+    if torch.cuda.is_available():
+        device = "cuda"
+        logger.info("CUDA available: %d device(s), using %s", torch.cuda.device_count(), torch.cuda.get_device_name(0))
+    elif torch.backends.mps.is_available():
+        device = "mps"
+        logger.info("Using Apple MPS device")
+    else:
+        device = "cpu"
+        logger.info("No GPU found, using CPU")
+    return device
+
+
+def on_train_epoch_end(trainer) -> None:
+    task = Task.current_task()
+    if not task:
+        return
+    for k, v in trainer.label_loss_items(trainer.tloss, prefix="train").items():
+        task.get_logger().report_scalar(k, "results", v, iteration=trainer.epoch)
+    for k, v in trainer.lr.items():
+        task.get_logger().report_scalar(f"lr/{k}", "results", v, iteration=trainer.epoch)
+
+
+def on_fit_epoch_end(trainer) -> None:
+    task = Task.current_task()
+    if not task:
+        return
+    for k, v in trainer.metrics.items():
+        task.get_logger().report_scalar(k, "results", v, iteration=trainer.epoch)
+
+
+def on_train_end(trainer) -> None:
+    task = Task.current_task()
+    if not task:
+        return
+    for f in [*trainer.plots.keys(), *trainer.validator.plots.keys()]:
+        if "batch" not in f.name and f.exists():
+            img = mpimg.imread(str(f))
+            fig = plt.figure()
+            ax = fig.add_axes([0, 0, 1, 1], frameon=False, aspect="auto", xticks=[], yticks=[])
+            ax.imshow(img)
+            task.get_logger().report_matplotlib_figure(
+                title=f.stem, series="", figure=fig, report_interactive=False,
+            )
+            plt.close(fig)
+    for k, v in trainer.validator.metrics.results_dict.items():
+        task.get_logger().report_single_value(f"val/{k}", v)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Train YOLO segmentation model")
+    parser.add_argument("--task_name", type=str, default=None, help="ClearML task name (default: {model}_{version})")
+    parser.add_argument("--model_name", type=str, default=None, help="Model filename (default: from config/models.yaml)")
+    parser.add_argument("--epochs", type=int, default=100, help="Number of epochs (default: 100)")
+    parser.add_argument("--batch", type=int, default=16, help="Batch size (default: 16)")
+    parser.add_argument("--weight_decay", type=float, default=0.0005, help="L2 regularization (default: 0.0005)")
+    parser.add_argument("--dropout", type=float, default=0.0, help="Dropout rate (default: 0.0)")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    project_settings = get_settings()
+
+    device = get_device()
+
+    Task.set_credentials(
+        web_host=project_settings.clearml_web_host,
+        api_host=project_settings.clearml_api_host,
+        files_host=project_settings.clearml_files_host,
+        key=project_settings.clearml_api_access_key,
+        secret=project_settings.clearml_api_secret_key,
+    )
+
+    ultra_settings.update({"clearml": False, "wandb": False})
+
+    dataset_version = project_settings.roboflow_dataset_version
+
+    model_cfg = load_model_config("train")
+    model_name = args.model_name or model_cfg.pop("model")
+    model_cfg.pop("model", None)
+    model_cfg["epochs"] = args.epochs
+    model_cfg["batch"] = args.batch
+    model_cfg["weight_decay"] = args.weight_decay
+    model_cfg["dropout"] = args.dropout
+    run_name = args.task_name or f"{model_name.removesuffix('.pt')}_v{dataset_version}"
+
+    task = Task.init(
+        project_name=project_settings.clearml_project,
+        task_name=run_name,
+        auto_connect_frameworks={"pytorch": False, "matplotlib": False},
+        output_uri=False,
+    )
+    logger.info("ClearML Task created: %s", task.id)
+    dataset_path = os.path.join("data", "data.yaml")
+
+    model_path = os.path.join("models", "base", model_name)
+    logger.info("Loading model from %s", model_path)
+    model = YOLO(model_path, task="segment")
+
+    model.add_callback("on_train_epoch_end", on_train_epoch_end)
+    model.add_callback("on_fit_epoch_end", on_fit_epoch_end)
+    model.add_callback("on_train_end", on_train_end)
+
+    logger.info("Starting training on device=%s, data=%s, config=%s", device, dataset_path, model_cfg)
+    model.train(
+        data=dataset_path,
+        device=device,
+        project="models/trained",
+        name=run_name,
+        **model_cfg,
+    )
+
+    save_dir = model.trainer.save_dir
+    hyperparams_path = os.path.join(save_dir, "hyperparams.yaml")
+    with open(hyperparams_path, "w") as f:
+        yaml.dump(dict(vars(model.trainer.args)), f, default_flow_style=False, sort_keys=False)
+    logger.info("Hyperparameters saved to %s", hyperparams_path)
+
+    logger.info("Running test evaluation")
+    test_results = model.val(data=dataset_path, split="test", device=device)
+    for k, v in test_results.results_dict.items():
+        task.get_logger().report_single_value(f"test/{k}", v)
+
+
+if __name__ == "__main__":
+    main()

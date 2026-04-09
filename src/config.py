@@ -1,0 +1,44 @@
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+import yaml
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+
+
+class Settings(BaseSettings):
+    roboflow_api_key: str = ""
+    huggingface_token: str = ""
+    clearml_web_host: str = ""
+    clearml_api_host: str = ""
+    clearml_files_host: str = ""
+    clearml_api_access_key: str = ""
+    clearml_api_secret_key: str = ""
+    clearml_project: str = "cavitation_tracker_yolo26"
+    roboflow_workspace: str = "itmo-ai-in-chemistry"
+    roboflow_project: str = "cavitation_bubbles_merged"
+    roboflow_dataset_version: int = 1
+    username: str
+    password: str
+
+    fastapi_host: str = Field(default="fastapi")
+    fastapi_port: int = Field(default=8000)
+    streamlit_port: int = Field(default=8501)
+    secret_key: str = Field(min_length=16)
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+def load_model_config(section: str) -> dict[str, Any]:
+    config_path = CONFIG_DIR / "models.yaml"
+    with config_path.open() as f:
+        config = yaml.safe_load(f)
+    return dict(config[section])

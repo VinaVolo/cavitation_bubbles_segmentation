@@ -1,93 +1,203 @@
 # Cavitation Bubbles Segmentation
 
-This project provides tools to detect, segment and track cavitation bubbles in video streams. It uses a YOLO-based segmentation model together with the ByteTrack tracker to extract bubble trajectories and compute various statistics.
+A tool for detecting, segmenting, and tracking cavitation bubbles in video. Uses a YOLO-based model and the ByteTrack tracker to build trajectories and compute bubble statistics.
 
 ## Features
 
-- Bubble detection and segmentation on each frame
+- Frame-by-frame bubble detection and segmentation
 - Object tracking with trajectory export
-- Automatic CSV reports with size and velocity of each bubble
-- Histograms and summary plots for quick analysis
-- Streamlit dashboard and FastAPI service
-- Docker support for easy deployment
+- Memory-efficient tracking: bounded history window and automatic cleanup of finished trackers
+- Automatic CSV reports with size and velocity per bubble
+- Histograms and summary plots
+- Streamlit web interface and FastAPI REST service
+- Docker support (CPU and GPU)
+- Experiment tracking with [ClearML](https://clear.ml/)
 
-## Quick Start
+## Requirements
 
-1. Clone the repository
-   ```bash
-   git clone https://github.com/your-user/cavitation_bubbles_segmentation.git
-   cd cavitation_bubbles_segmentation
-   ```
-2. Copy `.env.example` to `.env` and adjust parameters
-3. Build and run the containers
-   ```bash
-   docker-compose up --build
-   ```
-4. Open [http://localhost:8501](http://localhost:8501) to access the Streamlit app and upload a video
+- Linux
+- [uv](https://github.com/astral-sh/uv) — for local runs
+- [Docker](https://docs.docker.com/engine/install/) + [Docker Compose](https://docs.docker.com/compose/install/) — for containerised runs
+- *(optional)* NVIDIA GPU + [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) — for GPU acceleration
 
 ## Project Structure
 
 ```
-├── main_fastapi.py        # REST API for video processing
-├── main_streamlit.py      # Web interface
-├── download_from_huggingface.py  # download pretrained weights
+├── pyproject.toml                # Project dependencies (uv)
+├── Dockerfile                    # Universal image (CPU/GPU)
+├── docker-compose.yml            # Run without GPU
+├── docker-compose.gpu.yml        # Override for NVIDIA GPU
+├── .env.example                  # Environment variables template
 ├── src/
-│   ├── segmentation.py        # YOLO segmentation logic
-│   ├── tracker_bytetrack.py   # ByteTrack integration
-│   ├── tracking.py            # simple centroid tracker
-│   ├── video_processing.py    # processing pipeline
-│   └── utils.py
+│   ├── config.py                 # Configuration via environment variables
+│   ├── api/
+│   │   ├── main.py               # FastAPI app factory
+│   │   ├── auth.py               # JWT authentication
+│   │   └── video.py              # Video processing endpoint
+│   ├── ml/
+│   │   ├── segmentation.py       # YOLO segmentation logic
+│   │   ├── tracking.py           # ByteTrack tracker
+│   │   └── processing.py         # Video processing pipeline
+│   └── utils/
+│       ├── visualization.py      # Mask drawing
+│       └── geometry.py           # Centroid, distance calculations
+├── frontend/
+│   └── streamlit_app.py          # Web interface
+└── scripts/
+    ├── download_dataset.py       # Download dataset from Roboflow
+    ├── train.py                  # Model training with ClearML logging
+    ├── tune.py                   # Hyperparameter search with ClearML logging
+    └── download_model.py         # Download weights from Hugging Face
 ```
 
-## Training and Tuning
+## Quick Start
 
-Use `train_model.py` to train on your dataset and `tune_model.py` to run hyperparameter search. Pretrained weights can be downloaded from Hugging Face with `download_from_huggingface.py`.
-
-## Running Without Docker
-
-Install the dependencies and start the services manually
+### 1. Clone the repository
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python main_streamlit.py             # start the dashboard
-uvicorn main_fastapi:app --reload    # start the API server
+git clone https://github.com/your-user/cavitation_bubbles_segmentation.git
+cd cavitation_bubbles_segmentation
 ```
 
-## API Endpoints
+### 2. Download model weights (Git LFS)
 
-The FastAPI service exposes a `/process` endpoint that accepts a video and returns processed frames along with bubble statistics. See `main_fastapi.py` for details.
+```bash
+git lfs install
+git lfs pull
+```
+
+### 3. Configure environment variables
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and fill in the values:
+
+```env
+ROBOFLOW_API_KEY=your_key
+ROBOFLOW_WORKSPACE=itmo-ai-in-chemistry
+ROBOFLOW_PROJECT=cavitation_bubbles_merged
+ROBOFLOW_DATASET_VERSION=1
+HUGGINGFACE_TOKEN=your_token
+CLEARML_WEB_HOST=https://app.your-clearml-instance.example.com
+CLEARML_API_HOST=https://api.your-clearml-instance.example.com
+CLEARML_FILES_HOST=https://files.your-clearml-instance.example.com
+CLEARML_PROJECT=your_clearml_project
+CLEARML_API_ACCESS_KEY=your_access_key
+CLEARML_API_SECRET_KEY=your_secret_key
+username=admin
+password=your_password
+fastapi_host=fastapi     # use "fastapi" for Docker, "localhost" for local runs
+fastapi_port=8000
+streamlit_port=8501
+secret_key=random_string
+```
+
+---
+
+## Running with Docker
+
+### CPU (any machine)
+
+```bash
+docker compose up --build
+```
+
+### NVIDIA GPU
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+```
+
+Open [http://localhost:8501](http://localhost:8501) to access the Streamlit interface.
+
+---
+
+## Running Locally (without Docker)
+
+### 1. Install uv
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### 2. Install dependencies
+
+```bash
+uv sync
+```
+
+### 3. Set `localhost` in `.env`
+
+```env
+fastapi_host=localhost
+```
+
+### 4. Start FastAPI (terminal 1)
+
+```bash
+uv run uvicorn src.api.main:app --port 8000 --reload
+```
+
+### 5. Start Streamlit (terminal 2)
+
+```bash
+uv run streamlit run frontend/streamlit_app.py
+```
+
+Open [http://localhost:8501](http://localhost:8501).
+
+---
+
+## API
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/token` | Obtain a JWT token |
+| `POST` | `/process_video/` | Process a video file |
+
+Interactive docs available at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+---
+
+## Training
+
+### 1. Download the dataset from Roboflow
+
+```bash
+uv run python scripts/download_dataset.py
+```
+
+### 2. Train the model
+
+```bash
+uv run python scripts/train.py
+```
+
+Training metrics and artifacts are logged to ClearML automatically.
+
+### 3. Hyperparameter search
+
+```bash
+uv run python scripts/tune.py
+```
+
+### 4. Download weights from Hugging Face
+
+```bash
+uv run python scripts/download_model.py
+```
+
+---
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Dataset
-
-The project expects videos containing cavitation bubbles. Training data in YOLO format can be downloaded from Roboflow as shown in the training script. You can use your own dataset by editing `train_model.py` and updating the `data.yaml` path.
-
-## Contributing
-
-Contributions are welcome! Feel free to open issues or pull requests to improve the code, fix bugs, or add new features.
-
-## Example Usage
-
-To run the API server manually
-
-```bash
-uvicorn main_fastapi:app --reload
-```
-
-To process a single video from the command line
-
-```bash
-python main_fastapi.py --input path/to/video.mp4 --output results/
-```
-
-After processing, statistics will be stored in the `results` directory along with the annotated video.
+MIT License
 
 ## Acknowledgements
 
-This project builds upon the [Ultralytics YOLO](https://github.com/ultralytics/ultralytics) library and the [ByteTrack](https://github.com/ifzhang/ByteTrack) tracker. Special thanks to the Roboflow team for hosting the dataset.
- 
+- [Ultralytics YOLO](https://github.com/ultralytics/ultralytics)
+- [ByteTrack](https://github.com/ifzhang/ByteTrack)
+- [Roboflow](https://roboflow.com) — dataset hosting
+- [ClearML](https://clear.ml/) — experiment tracking
