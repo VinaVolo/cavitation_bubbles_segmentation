@@ -290,10 +290,11 @@ def main() -> None:
 
     clearml_logger = task.get_logger()
     for k, v in best_config.items():
-        clearml_logger.report_single_value(f"best_hp/{k}", v)
+        if isinstance(v, (int, float)):
+            clearml_logger.report_single_value(f"best_hp/{k}", round(v, 3))
     for k, v in best_metrics.items():
         if isinstance(v, (int, float)):
-            clearml_logger.report_single_value(f"best_metric/{k}", v)
+            clearml_logger.report_single_value(f"best_metric/{k}", round(v, 3))
 
     best_hp_path = Path("models", "tuned") / "best_hyperparams.yaml"
     best_hp_path.parent.mkdir(parents=True, exist_ok=True)
