@@ -132,27 +132,31 @@ def train_yolo(
 
     train_kwargs = {**base_cfg, **config}
 
-    model.train(
-        data=dataset_path,
-        device=device,
-        project="models/tuned",
-        name=f"trial_{trial_id}",
-        **train_kwargs,
-    )
+    try:
+        model.train(
+            data=dataset_path,
+            device=device,
+            project="models/tuned",
+            name=f"trial_{trial_id}",
+            **train_kwargs,
+        )
 
-    _upload_plots(model.trainer, task)
+        if model.trainer:
+            _upload_plots(model.trainer, task)
 
-    test_metrics = model.val(data=dataset_path, split="test", device=device)
-    clearml_logger = task.get_logger()
-    for k, v in test_metrics.results_dict.items():
-        if isinstance(v, (int, float)):
-            rounded = round(v, 3)
-            title = f"test/\n{k.replace('/', '/\n')}"
-            clearml_logger.report_single_value(title, rounded)
-            logger.info("test/%s: %.3f", k, rounded)
-
-    task.flush(wait_for_uploads=True)
-    task.close()
+        test_metrics = model.val(data=dataset_path, split="test", device=device)
+        clearml_logger = task.get_logger()
+        for k, v in test_metrics.results_dict.items():
+            if isinstance(v, (int, float)):
+                rounded = round(v, 3)
+                title = f"test/\n{k.replace('/', '/\n')}"
+                clearml_logger.report_single_value(title, rounded)
+                logger.info("test/%s: %.3f", k, rounded)
+    except Exception:
+        logger.exception("Trial %s failed or was stopped early", trial_id)
+    finally:
+        task.flush(wait_for_uploads=True)
+        task.close()
 
 
 def parse_args() -> argparse.Namespace:
