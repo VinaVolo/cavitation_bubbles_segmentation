@@ -15,7 +15,6 @@ from clearml import Task
 from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 from ultralytics import YOLO
-from ultralytics import settings as ultra_settings
 
 from src.config import get_settings, load_tune_config
 
@@ -97,6 +96,9 @@ def train_yolo(
     device = int(gpu_ids[0]) if gpu_ids else "cpu"
     logger.info("Trial assigned GPU: %s, using device=%s", gpu_ids, device)
 
+    from ultralytics import settings as ultra_settings
+    ultra_settings.update({"runs_dir": "models/tuned", "tensorboard": False, "clearml": False, "wandb": False})
+
     Task.set_credentials(**clearml_credentials)
     trial_id = tune.get_context().get_trial_id()
     task = Task.init(
@@ -107,8 +109,6 @@ def train_yolo(
     )
     task.set_parent(parent_task_id)
     task.connect(config, name="hyperparameters")
-
-    ultra_settings.update({"runs_dir": "models/tuned", "tensorboard": False, "clearml": False, "wandb": False})
 
     model = YOLO(model_path, task="segment")
     model.add_callback("on_train_epoch_end", _on_train_epoch_end)
@@ -163,8 +163,6 @@ def main() -> None:
         "key": project_settings.clearml_api_access_key,
         "secret": project_settings.clearml_api_secret_key,
     }
-
-    ultra_settings.update({"runs_dir": "models/tuned", "tensorboard": False, "clearml": False, "wandb": False})
 
     dataset_version = project_settings.roboflow_dataset_version
     tune_cfg = load_tune_config()
