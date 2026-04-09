@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import ray
 import torch
 import yaml
 from clearml import Task
@@ -94,6 +95,10 @@ def main() -> None:
         key=project_settings.clearml_api_access_key,
         secret=project_settings.clearml_api_secret_key,
     )
+
+    ray_tmp = Path("models", "tmp").resolve()
+    ray_tmp.mkdir(parents=True, exist_ok=True)
+    ray.init(_temp_dir=str(ray_tmp))
 
     ultra_settings.update({"runs_dir": "models/tuned", "tensorboard": False, "clearml": False, "wandb": False})
 
