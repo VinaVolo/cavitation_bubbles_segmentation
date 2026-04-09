@@ -42,3 +42,9 @@ def load_model_config(section: str) -> dict[str, Any]:
     with config_path.open() as f:
         config = yaml.safe_load(f)
     return dict(config[section])
+
+
+def load_tune_config() -> dict[str, Any]:
+    config_path = CONFIG_DIR / "tune.yaml"
+    with config_path.open() as f:
+        return dict(yaml.safe_load(f))

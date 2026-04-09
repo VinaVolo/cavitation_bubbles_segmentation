@@ -1,0 +1,38 @@
+model: yolo26x-seg.pt
+epochs: 50
+seed: 42
+batch: 16
+imgsz: 640
+plots: false
+save: true
+val: true
+verbose: false
+
+ray:
+  num_samples: 50
+  max_concurrent_trials: 2
+  gpu_per_trial: 1
+  cpu_per_trial: 2
+  scheduler:
+    max_t: 50
+    grace_period: 10
+    reduction_factor: 3
+  search_space:
+    lr0: [0.0001, 0.01]
+    lrf: [0.01, 0.2]
+    momentum: [0.85, 0.98]
+    weight_decay: [0.0001, 0.001]
+    warmup_epochs: [1.0, 5.0]
+    warmup_momentum: [0.5, 0.95]
+    box: [5.0, 10.0]
+    cls: [0.3, 1.5]
+    hsv_h: [0.0, 0.03]
+    hsv_s: [0.0, 0.7]
+    hsv_v: [0.0, 0.5]
+    degrees: [0.0, 15.0]
+    translate: [0.0, 0.2]
+    scale: [0.0, 0.9]
+    fliplr: [0.0, 0.5]
+    mosaic: [0.0, 1.0]
+    mixup: [0.0, 0.3]
+    dropout: [0.0, 0.3]

@@ -8,14 +8,3 @@ train:
   save: true
   val: true
   verbose: true
-
-tune:
-  model: yolo26x-seg.pt
-  use_ray: true
-  seed: 42
-  iterations: 50
-  gpu_per_trial: 1
-  workers: 1
-  plots: true
-  save: true
-  val: true
