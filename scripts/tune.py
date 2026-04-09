@@ -45,15 +45,9 @@ def _build_search_space(space_cfg: dict[str, list[float]]) -> dict[str, tune.sam
 
 def train_yolo(config: dict[str, Any], model_path: str, dataset_path: str, base_cfg: dict[str, Any]) -> None:
     """Training function executed by each Ray Tune trial."""
-    import os
-
     gpu_ids = ray.get_gpu_ids()
-    if gpu_ids:
-        gpu_id = str(int(gpu_ids[0]))
-        os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
-        device = 0
-    else:
-        device = "cpu"
+    device = int(gpu_ids[0]) if gpu_ids else "cpu"
+    logger.info("Trial assigned GPU: %s, using device=%s", gpu_ids, device)
     model = YOLO(model_path, task="segment")
 
     train_kwargs = {**base_cfg, **config}
@@ -88,6 +82,9 @@ def main() -> None:
         key=project_settings.clearml_api_access_key,
         secret=project_settings.clearml_api_secret_key,
     )
+
+    import os
+    os.environ["RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO"] = "0"
 
     ray_tmp = Path(Path.home(), "ray_tmp")
     ray_tmp.mkdir(parents=True, exist_ok=True)
