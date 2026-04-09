@@ -57,10 +57,10 @@ def _on_train_epoch_end(trainer: Any) -> None:
 
 def _on_fit_epoch_end(trainer: Any) -> None:
     task = Task.current_task()
-    if task:
-        for k, v in trainer.metrics.items():
-            task.get_logger().report_scalar(k, "results", v, iteration=trainer.epoch)
-    tune.report(**trainer.metrics, epoch=trainer.epoch)
+    if not task:
+        return
+    for k, v in trainer.metrics.items():
+        task.get_logger().report_scalar(k, "results", v, iteration=trainer.epoch)
 
 
 def _on_train_end(trainer: Any) -> None:
@@ -97,7 +97,7 @@ def train_yolo(
     logger.info("Trial assigned GPU: %s, using device=%s", gpu_ids, device)
 
     from ultralytics import settings as ultra_settings
-    ultra_settings.update({"runs_dir": "models/tuned", "tensorboard": False, "clearml": False, "wandb": False, "raytune": False})
+    ultra_settings.update({"runs_dir": "models/tuned", "tensorboard": False, "clearml": False, "wandb": False, "raytune": True})
 
     Task.set_credentials(**clearml_credentials)
     trial_id = tune.get_context().get_trial_id()
