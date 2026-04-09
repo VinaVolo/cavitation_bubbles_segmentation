@@ -62,12 +62,16 @@ def _on_fit_epoch_end(trainer: Any) -> None:
     for k, v in trainer.metrics.items():
         task.get_logger().report_scalar(k, "results", v, iteration=trainer.epoch)
 
+    # Report all metrics (including mask and loss) to Ray Tune
+    ray_metrics = dict(trainer.metrics)
+    ray_metrics.update(trainer.label_loss_items(trainer.tloss, prefix="val"))
+    tune.report(metrics=ray_metrics)
 
-def _on_train_end(trainer: Any) -> None:
-    task = Task.current_task()
-    if not task:
-        return
-    for f in [*trainer.plots.keys(), *trainer.validator.plots.keys()]:
+
+def _upload_plots(trainer: Any, task: Task) -> None:
+    """Upload YOLO plots and final validation metrics to a ClearML task."""
+    plot_files = [*trainer.plots.keys(), *trainer.validator.plots.keys()]
+    for f in plot_files:
         if "batch" not in f.name and f.exists():
             img = mpimg.imread(str(f))
             fig = plt.figure()
@@ -78,7 +82,15 @@ def _on_train_end(trainer: Any) -> None:
             )
             plt.close(fig)
     for k, v in trainer.validator.metrics.results_dict.items():
-        task.get_logger().report_single_value(f"val/{k}", v)
+        if isinstance(v, (int, float)):
+            task.get_logger().report_single_value(f"val/{k}", round(v, 3))
+
+
+def _on_train_end(trainer: Any) -> None:
+    task = Task.current_task()
+    if not task:
+        return
+    _upload_plots(trainer, task)
 
 
 def train_yolo(
@@ -90,6 +102,7 @@ def train_yolo(
     clearml_project: str,
     parent_task_id: str,
     run_name: str,
+    tags: list[str],
 ) -> None:
     """Training function executed by each Ray Tune trial."""
     gpu_ids = ray.get_gpu_ids()
@@ -97,7 +110,7 @@ def train_yolo(
     logger.info("Trial assigned GPU: %s, using device=%s", gpu_ids, device)
 
     from ultralytics import settings as ultra_settings
-    ultra_settings.update({"runs_dir": "models/tuned", "tensorboard": False, "clearml": False, "wandb": False, "raytune": True})
+    ultra_settings.update({"runs_dir": "models/tuned", "tensorboard": False, "clearml": False, "wandb": False, "raytune": False})
 
     Task.set_credentials(**clearml_credentials)
     trial_id = tune.get_context().get_trial_id()
@@ -108,6 +121,7 @@ def train_yolo(
         output_uri=False,
     )
     task.set_parent(parent_task_id)
+    task.add_tags(tags)
     task.connect(config, name="hyperparameters")
 
     model = YOLO(model_path, task="segment")
@@ -125,6 +139,17 @@ def train_yolo(
         **train_kwargs,
     )
 
+    _upload_plots(model.trainer, task)
+
+    test_metrics = model.val(data=dataset_path, split="test", device=device)
+    clearml_logger = task.get_logger()
+    for k, v in test_metrics.results_dict.items():
+        if isinstance(v, (int, float)):
+            rounded = round(v, 3)
+            clearml_logger.report_single_value(f"test/{k}", rounded)
+            logger.info("test/%s: %.3f", k, rounded)
+
+    task.flush(wait_for_uploads=True)
     task.close()
 
 
@@ -133,7 +158,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num_samples", type=int, default=None, help="Number of trials (overrides config)")
     parser.add_argument("--epochs", type=int, default=None, help="Epochs per trial (overrides config)")
     parser.add_argument("--model_name", type=str, default=None, help="Model filename (overrides config)")
-    parser.add_argument("--metric", type=str, default="metrics/mAP50-95(M)", help="Metric to optimize (default: metrics/mAP50-95(M))")
+    parser.add_argument("--metric", type=str, default="val/seg_loss", help="Metric to optimize (default: val/seg_loss)")
+    parser.add_argument("--mode", type=str, default="min", choices=["min", "max"], help="Optimization direction (default: min)")
+    parser.add_argument("--tags", type=str, nargs="*", default=[], help="Additional ClearML tags")
     return parser.parse_args()
 
 
@@ -192,6 +219,8 @@ def main() -> None:
         auto_connect_frameworks={"pytorch": False, "matplotlib": False},
         output_uri=False,
     )
+    tags = [f"dataset_v{dataset_version}", *args.tags]
+    task.add_tags(tags)
     logger.info("ClearML Task created: %s", task.id)
 
     search_space = _build_search_space(ray_cfg["search_space"])
@@ -199,7 +228,7 @@ def main() -> None:
     scheduler_cfg = ray_cfg["scheduler"]
     scheduler = ASHAScheduler(
         metric=args.metric,
-        mode="max",
+        mode=args.mode,
         max_t=scheduler_cfg["max_t"],
         grace_period=scheduler_cfg["grace_period"],
         reduction_factor=scheduler_cfg["reduction_factor"],
@@ -218,6 +247,7 @@ def main() -> None:
         clearml_project=project_settings.clearml_project,
         parent_task_id=task.id,
         run_name=run_name,
+        tags=tags,
     )
     trainable_with_resources = tune.with_resources(
         trainable,
@@ -239,12 +269,12 @@ def main() -> None:
     )
 
     logger.info(
-        "Starting Ray Tune: %d samples, metric=%s, device=%s",
-        num_samples, args.metric, device,
+        "Starting Ray Tune: %d samples, metric=%s (mode=%s), device=%s",
+        num_samples, args.metric, args.mode, device,
     )
     results = tuner.fit()
 
-    best_result = results.get_best_result(metric=args.metric, mode="max")
+    best_result = results.get_best_result(metric=args.metric, mode=args.mode)
     if best_result is None:
         logger.error("All trials failed — no best result available.")
         return

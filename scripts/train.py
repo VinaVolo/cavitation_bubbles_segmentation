@@ -64,7 +64,8 @@ def on_train_end(trainer) -> None:
             )
             plt.close(fig)
     for k, v in trainer.validator.metrics.results_dict.items():
-        task.get_logger().report_single_value(f"val/{k}", v)
+        if isinstance(v, (int, float)):
+            task.get_logger().report_single_value(f"val/{k}", round(v, 3))
 
 
 def parse_args() -> argparse.Namespace:
@@ -111,6 +112,7 @@ def main() -> None:
         auto_connect_frameworks={"pytorch": False, "matplotlib": False},
         output_uri=False,
     )
+    task.add_tags([f"dataset_v{dataset_version}"])
     logger.info("ClearML Task created: %s", task.id)
     dataset_path = os.path.join("data", "data.yaml")
 
@@ -140,7 +142,8 @@ def main() -> None:
     logger.info("Running test evaluation")
     test_results = model.val(data=dataset_path, split="test", device=device)
     for k, v in test_results.results_dict.items():
-        task.get_logger().report_single_value(f"test/{k}", v)
+        if isinstance(v, (int, float)):
+            task.get_logger().report_single_value(f"test/{k}", round(v, 3))
 
 
 if __name__ == "__main__":
