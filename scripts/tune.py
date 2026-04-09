@@ -48,8 +48,13 @@ def train_yolo(config: dict[str, Any], model_path: str, dataset_path: str, base_
     """Training function executed by each Ray Tune trial."""
     import os
 
-    gpu_ids = os.environ.get("CUDA_VISIBLE_DEVICES", "")
-    device = f"cuda:0" if gpu_ids else "cpu"
+    gpu_ids = ray.get_gpu_ids()
+    if gpu_ids:
+        gpu_id = str(int(gpu_ids[0]))
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
+        device = 0
+    else:
+        device = "cpu"
     model = YOLO(model_path, task="segment")
 
     train_kwargs = {**base_cfg, **config}
