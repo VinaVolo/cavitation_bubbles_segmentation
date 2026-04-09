@@ -219,7 +219,7 @@ def main() -> None:
         auto_connect_frameworks={"pytorch": False, "matplotlib": False},
         output_uri=False,
     )
-    tags = [f"dataset_v{dataset_version}", *args.tags]
+    tags = list(args.tags)
     task.add_tags(tags)
     logger.info("ClearML Task created: %s", task.id)
 

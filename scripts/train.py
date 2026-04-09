@@ -112,7 +112,6 @@ def main() -> None:
         auto_connect_frameworks={"pytorch": False, "matplotlib": False},
         output_uri=False,
     )
-    task.add_tags([f"dataset_v{dataset_version}"])
     logger.info("ClearML Task created: %s", task.id)
     dataset_path = os.path.join("data", "data.yaml")
 
