@@ -9,7 +9,7 @@ import torch
 import yaml
 from clearml import Task
 from ray import tune
-from ray.train import report as train_report
+from ray.tune import report as tune_report
 from ray.tune.schedulers import ASHAScheduler
 from ultralytics import YOLO
 from ultralytics import settings as ultra_settings
@@ -51,7 +51,7 @@ def train_yolo(config: dict[str, Any], model_path: str, dataset_path: str, devic
 
     def _report_metrics(trainer: Any) -> None:
         metrics = trainer.metrics
-        train_report({
+        tune_report({
             "map50": metrics.get("metrics/mAP50(B)", 0.0),
             "map50_95": metrics.get("metrics/mAP50-95(B)", 0.0),
             "map50_mask": metrics.get("metrics/mAP50(M)", 0.0),
@@ -67,7 +67,7 @@ def train_yolo(config: dict[str, Any], model_path: str, dataset_path: str, devic
     model.train(
         data=dataset_path,
         device=device,
-        project="tune_runs",
+        project="models/tuned",
         name="trial",
         **train_kwargs,
     )
@@ -95,7 +95,7 @@ def main() -> None:
         secret=project_settings.clearml_api_secret_key,
     )
 
-    ultra_settings.update({"runs_dir": "tune_runs", "tensorboard": False, "clearml": False, "wandb": False})
+    ultra_settings.update({"runs_dir": "models/tuned", "tensorboard": False, "clearml": False, "wandb": False})
 
     dataset_version = project_settings.roboflow_dataset_version
     tune_cfg = load_tune_config()
@@ -164,7 +164,7 @@ def main() -> None:
         ),
         run_config=tune.RunConfig(
             name=run_name,
-            storage_path=str(Path("tune_runs", "ray_results").resolve()),
+            storage_path=str(Path("models", "tuned", "ray_results").resolve()),
         ),
     )
 
@@ -192,7 +192,7 @@ def main() -> None:
         if isinstance(v, (int, float)):
             clearml_logger.report_single_value(f"best_metric/{k}", v)
 
-    best_hp_path = Path("tune_runs") / "best_hyperparams.yaml"
+    best_hp_path = Path("models", "tuned") / "best_hyperparams.yaml"
     best_hp_path.parent.mkdir(parents=True, exist_ok=True)
     with best_hp_path.open("w") as f:
         yaml.dump(
