@@ -10,7 +10,6 @@ import torch
 import yaml
 from clearml import Task
 from ray import tune
-from ray.tune import report as tune_report
 from ray.tune.schedulers import ASHAScheduler
 from ultralytics import YOLO
 from ultralytics import settings as ultra_settings
@@ -59,21 +58,6 @@ def train_yolo(config: dict[str, Any], model_path: str, dataset_path: str, base_
 
     train_kwargs = {**base_cfg, **config}
 
-    def _report_metrics(trainer: Any) -> None:
-        metrics = trainer.metrics
-        tune_report(
-            map50=metrics.get("metrics/mAP50(B)", 0.0),
-            map50_95=metrics.get("metrics/mAP50-95(B)", 0.0),
-            map50_mask=metrics.get("metrics/mAP50(M)", 0.0),
-            map50_95_mask=metrics.get("metrics/mAP50-95(M)", 0.0),
-            val_box_loss=metrics.get("val/box_loss", 0.0),
-            val_seg_loss=metrics.get("val/seg_loss", 0.0),
-            val_cls_loss=metrics.get("val/cls_loss", 0.0),
-            epoch=trainer.epoch,
-        )
-
-    model.add_callback("on_fit_epoch_end", _report_metrics)
-
     model.train(
         data=dataset_path,
         device=device,
@@ -88,7 +72,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num_samples", type=int, default=None, help="Number of trials (overrides config)")
     parser.add_argument("--epochs", type=int, default=None, help="Epochs per trial (overrides config)")
     parser.add_argument("--model_name", type=str, default=None, help="Model filename (overrides config)")
-    parser.add_argument("--metric", type=str, default="map50_95_mask", help="Metric to optimize (default: map50_95_mask)")
+    parser.add_argument("--metric", type=str, default="metrics/mAP50-95(M)", help="Metric to optimize (default: metrics/mAP50-95(M))")
     return parser.parse_args()
 
 
