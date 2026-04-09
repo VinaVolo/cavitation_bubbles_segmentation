@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+from pathlib import Path
 
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
@@ -91,7 +92,7 @@ def main() -> None:
         secret=project_settings.clearml_api_secret_key,
     )
 
-    ultra_settings.update({"clearml": False, "wandb": False})
+    ultra_settings.update({"runs_dir": str(Path.cwd()), "clearml": False, "wandb": False})
 
     dataset_version = project_settings.roboflow_dataset_version
 
