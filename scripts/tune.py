@@ -164,6 +164,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mode", type=str, default="min", choices=["min", "max"], help="Optimization direction (default: min)")
     parser.add_argument("--tags", type=str, nargs="*", default=[], help="Additional ClearML tags")
     parser.add_argument("--data", type=str, default="data/data.yaml", help="Path to dataset YAML (default: data/data.yaml)")
+    parser.add_argument("--task_name", type=str, default=None, help="ClearML task name (default: {model}-v{version}-raytune)")
     return parser.parse_args()
 
 
@@ -206,7 +207,7 @@ def main() -> None:
 
     num_samples = args.num_samples or ray_cfg["num_samples"]
 
-    run_name = f"{model_name.removesuffix('.pt')}-v{dataset_version}-raytune"
+    run_name = args.task_name or f"{model_name.removesuffix('.pt')}-v{dataset_version}-raytune"
 
     dataset_path = str(Path(args.data).resolve())
     model_path = str(Path("models", "base", model_name).resolve())
