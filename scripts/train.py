@@ -78,9 +78,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model_name", type=str, default=None, help="Model filename (default: from config/models.yaml)")
     parser.add_argument("--epochs", type=int, default=100, help="Number of epochs (default: 100)")
     parser.add_argument("--batch", type=int, default=16, help="Batch size (default: 16)")
-    parser.add_argument("--weight_decay", type=float, default=0.0005, help="L2 regularization (default: 0.0005)")
-    parser.add_argument("--dropout", type=float, default=0.0, help="Dropout rate (default: 0.0)")
+    parser.add_argument("--weight_decay", type=float, default=None, help="L2 regularization (overrides config)")
+    parser.add_argument("--dropout", type=float, default=None, help="Dropout rate (overrides config)")
     parser.add_argument("--data", type=str, default="data/data.yaml", help="Path to dataset YAML (default: data/data.yaml)")
+    parser.add_argument("--config", type=str, default=None, help="Path to YAML with hyperparameters (overrides config/models.yaml)")
     return parser.parse_args()
 
 
@@ -103,12 +104,19 @@ def main() -> None:
     dataset_version = project_settings.roboflow_dataset_version
 
     model_cfg = load_model_config("train")
+    if args.config:
+        with open(args.config) as f:
+            custom_cfg = yaml.safe_load(f)
+        if custom_cfg:
+            model_cfg.update(custom_cfg)
     model_name = args.model_name or model_cfg.pop("model")
     model_cfg.pop("model", None)
     model_cfg["epochs"] = args.epochs
     model_cfg["batch"] = args.batch
-    model_cfg["weight_decay"] = args.weight_decay
-    model_cfg["dropout"] = args.dropout
+    if args.weight_decay is not None:
+        model_cfg["weight_decay"] = args.weight_decay
+    if args.dropout is not None:
+        model_cfg["dropout"] = args.dropout
     run_name = args.task_name or f"{model_name.removesuffix('.pt')}_v{dataset_version}"
 
     task = Task.init(
