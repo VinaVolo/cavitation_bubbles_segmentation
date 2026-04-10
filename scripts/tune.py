@@ -66,9 +66,11 @@ def _on_fit_epoch_end(trainer: Any) -> None:
             task.get_logger().report_scalar(k, "results", v, iteration=trainer.epoch)
 
     # Report all metrics (including mask and loss) to Ray Tune
-    ray_metrics = dict(trainer.metrics)
-    ray_metrics.update(trainer.label_loss_items(trainer.tloss, prefix="val"))
-    tune.report(metrics=ray_metrics)
+    # Skip last epoch to let Ultralytics finish on_train_end (generate plots)
+    if trainer.epoch < trainer.epochs - 1:
+        ray_metrics = dict(trainer.metrics)
+        ray_metrics.update(trainer.label_loss_items(trainer.tloss, prefix="val"))
+        tune.report(metrics=ray_metrics)
 
 
 def _upload_plots(trainer: Any, task: Task) -> None:
@@ -143,21 +145,24 @@ def train_yolo(
             name=f"trial_{trial_id}",
             **train_kwargs,
         )
-
+    except Exception:
+        logger.exception("Trial %s training interrupted or failed", trial_id)
+    finally:
         if model.trainer:
             _upload_plots(model.trainer, task)
 
-        test_metrics = model.val(data=dataset_path, split="test", device=device)
-        clearml_logger = task.get_logger()
-        for k, v in test_metrics.results_dict.items():
-            if isinstance(v, (int, float)):
-                rounded = round(v, 3)
-                title = f"test/\n{k.replace('/', '/\n')}"
-                clearml_logger.report_single_value(title, rounded)
-                logger.info("test/%s: %.3f", k, rounded)
-    except Exception:
-        logger.exception("Trial %s failed or was stopped early", trial_id)
-    finally:
+        try:
+            test_metrics = model.val(data=dataset_path, split="test", device=device)
+            clearml_logger = task.get_logger()
+            for k, v in test_metrics.results_dict.items():
+                if isinstance(v, (int, float)):
+                    rounded = round(v, 3)
+                    title = f"test/\n{k.replace('/', '/\n')}"
+                    clearml_logger.report_single_value(title, rounded)
+                    logger.info("test/%s: %.3f", k, rounded)
+        except Exception:
+            logger.exception("Trial %s test evaluation failed", trial_id)
+
         task.flush(wait_for_uploads=True)
         task.close()
 
