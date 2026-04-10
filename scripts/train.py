@@ -109,6 +109,8 @@ def main() -> None:
         with open(args.config) as f:
             custom_cfg = yaml.safe_load(f)
         if custom_cfg:
+            if "train" in custom_cfg:
+                custom_cfg = dict(custom_cfg["train"])
             model_cfg.update(custom_cfg)
     model_name = args.model_name or model_cfg.pop("model")
     model_cfg.pop("model", None)
