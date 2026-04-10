@@ -1,8 +1,8 @@
 train:
-  model: yolo26n-seg.pt
+  model: yolo26m-seg.pt
   epochs: 100
   seed: 42
-  batch: 16
+  batch: 32
   imgsz: 640
   plots: true
   save: true

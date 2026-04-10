@@ -82,6 +82,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dropout", type=float, default=None, help="Dropout rate (overrides config)")
     parser.add_argument("--data", type=str, default="data/data.yaml", help="Path to dataset YAML (default: data/data.yaml)")
     parser.add_argument("--config", type=str, default=None, help="Path to YAML with hyperparameters (overrides config/models.yaml)")
+    parser.add_argument("--tags", nargs="+", default=None, help="ClearML task tags (e.g. --tags tuned best_v1)")
     return parser.parse_args()
 
 
@@ -125,6 +126,8 @@ def main() -> None:
         auto_connect_frameworks={"pytorch": False, "matplotlib": False},
         output_uri=False,
     )
+    if args.tags:
+        task.add_tags(args.tags)
     logger.info("ClearML Task created: %s", task.id)
     dataset_path = args.data
 
