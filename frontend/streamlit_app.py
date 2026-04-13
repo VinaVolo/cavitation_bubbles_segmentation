@@ -145,7 +145,7 @@ if st.session_state.token is None:
     with st.form("login_form"):
         username = st.text_input("Username", placeholder="Enter username")
         password = st.text_input("Password", type="password", placeholder="Enter password")
-        submitted = st.form_submit_button("Sign in", use_container_width=True, type="primary")
+        submitted = st.form_submit_button("Sign in", width="stretch", type="primary")
         if submitted:
             try:
                 response = requests.post(
@@ -183,7 +183,7 @@ with st.sidebar:
         "- Non-MP4 files are auto-converted for preview"
     )
     st.divider()
-    if st.button("Logout", use_container_width=True):
+    if st.button("Logout", width="stretch"):
         st.session_state.token = None
         st.session_state.processing_result = None
         st.rerun()
@@ -228,7 +228,7 @@ if uploaded_file is not None:
     with center:
         process_clicked = st.button(
             "🚀  Process video",
-            use_container_width=True,
+            width="stretch",
             type="primary",
         )
 
@@ -308,11 +308,11 @@ if st.session_state.processing_result is not None:
             if res["speed_hist"]:
                 with hist_cols[0]:
                     st.markdown("**Speed histogram** — top-20 longest-lived bubbles")
-                    st.image(res["speed_hist"], use_container_width=True)
+                    st.image(res["speed_hist"], width="stretch")
             if res["area_hist"]:
                 with hist_cols[1]:
                     st.markdown("**Area histogram** — top-20 longest-lived bubbles")
-                    st.image(res["area_hist"], use_container_width=True)
+                    st.image(res["area_hist"], width="stretch")
         else:
             st.info("No histograms available (not enough tracked bubbles).")
 
@@ -324,14 +324,14 @@ if st.session_state.processing_result is not None:
                 "📹  Video",
                 data=res["video_data"],
                 file_name=res["video_name"],
-                use_container_width=True,
+                width="stretch",
             )
         with dl_cols[1]:
             st.download_button(
                 "📄  CSV data",
                 data=res["csv_data"],
                 file_name=res["csv_name"],
-                use_container_width=True,
+                width="stretch",
             )
         if res["speed_hist"]:
             with dl_cols[2]:
@@ -339,7 +339,7 @@ if st.session_state.processing_result is not None:
                     "📊  Speed hist",
                     data=res["speed_hist"],
                     file_name=res["speed_hist_name"],
-                    use_container_width=True,
+                    width="stretch",
                 )
         if res["area_hist"]:
             with dl_cols[3]:
@@ -347,5 +347,5 @@ if st.session_state.processing_result is not None:
                     "📊  Area hist",
                     data=res["area_hist"],
                     file_name=res["area_hist_name"],
-                    use_container_width=True,
+                    width="stretch",
                 )
