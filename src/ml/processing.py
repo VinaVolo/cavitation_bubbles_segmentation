@@ -135,13 +135,13 @@ def _generate_histograms(
 
     sorted_tracks = sorted(all_tracks, key=lambda tr: tr.history_len, reverse=True)
     top20 = sorted_tracks[:20]
-    speeds = []
-    areas = []
+    speeds: list[float] = []
+    areas: list[float] = []
     for tr in top20:
-        vx = tr.state[4]
-        vy = tr.state[5]
+        vx = float(tr.state[4])
+        vy = float(tr.state[5])
         speeds.append(math.sqrt(vx * vx + vy * vy))
-        areas.append(tr.state[2])
+        areas.append(float(tr.state[2]))
 
     plt.figure()
     plt.hist(speeds, bins=10, color="blue", alpha=0.7)
