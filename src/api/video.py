@@ -53,7 +53,7 @@ async def process_video_endpoint(
         output_video_path = os.path.join(tmp_dir, f"processed_{unique_filename}.mp4")
         csv_path = os.path.join(tmp_dir, f"data_{unique_filename.split('.')[0]}.csv")
 
-        speed_hist_file, area_hist_file = video_processor.process_video(
+        speed_hist_file, area_hist_file, hist_data_file = video_processor.process_video(
             input_path, output_video_path, csv_path, tmp_dir
         )
 
@@ -65,6 +65,8 @@ async def process_video_endpoint(
                 zf.write(speed_hist_file, "histogram_speed.png")
             if area_hist_file:
                 zf.write(area_hist_file, "histogram_area.png")
+            if hist_data_file:
+                zf.write(hist_data_file, "histogram_data.json")
 
         def _stream_and_cleanup():
             try:

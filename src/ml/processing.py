@@ -1,4 +1,5 @@
 import csv
+import json
 import logging
 import math
 import os
@@ -25,7 +26,7 @@ class VideoProcessor:
         output_video_path: str,
         csv_path: str,
         hist_folder: str,
-    ) -> tuple[str | None, str | None]:
+    ) -> tuple[str | None, str | None, str | None]:
         tracker = ByteTracker(
             high_thresh=0.6,
             low_thresh=0.1,
@@ -127,10 +128,10 @@ class VideoProcessor:
 
 def _generate_histograms(
     tracker: ByteTracker, hist_folder: str
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, str | None, str | None]:
     all_tracks = tracker.finished_tracks + tracker.trackers
     if not all_tracks:
-        return None, None
+        return None, None, None
 
     sorted_tracks = sorted(all_tracks, key=lambda tr: tr.history_len, reverse=True)
     top20 = sorted_tracks[:20]
@@ -162,4 +163,8 @@ def _generate_histograms(
     plt.savefig(area_hist_file)
     plt.close()
 
-    return speed_hist_file, area_hist_file
+    data_file = os.path.join(hist_folder, "histogram_data.json")
+    with open(data_file, "w") as f:
+        json.dump({"speeds": speeds, "areas": areas}, f)
+
+    return speed_hist_file, area_hist_file, data_file

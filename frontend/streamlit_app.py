@@ -1,9 +1,11 @@
 import io
+import json
 import os
 import subprocess
 import tempfile
 import zipfile
 
+import matplotlib.pyplot as plt
 import requests
 import streamlit as st
 
@@ -127,6 +129,34 @@ def _make_preview(video_bytes: bytes, ext: str) -> bytes | None:
         for p in (tmp_orig_path, tmp_preview_path):
             if p and os.path.exists(p):
                 os.unlink(p)
+
+
+def _render_histogram(
+    values: list[float],
+    color: str,
+    title: str,
+    xlabel: str,
+    x_min: float | None = None,
+    x_max: float | None = None,
+) -> bytes:
+    """Render a histogram to PNG bytes. Optional x-axis range overrides matplotlib defaults."""
+    hist_range = None
+    if x_min is not None and x_max is not None and x_max > x_min:
+        hist_range = (x_min, x_max)
+
+    fig, ax = plt.subplots()
+    ax.hist(values, bins=10, range=hist_range, color=color, alpha=0.7)
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Frequency")
+    if hist_range is not None:
+        ax.set_xlim(hist_range)
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png")
+    plt.close(fig)
+    return buf.getvalue()
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -256,6 +286,13 @@ if uploaded_file is not None:
                 speed_hist = zf.read("histogram_speed.png") if "histogram_speed.png" in zf.namelist() else None
                 area_hist = zf.read("histogram_area.png") if "histogram_area.png" in zf.namelist() else None
 
+                speeds: list[float] = []
+                areas: list[float] = []
+                if "histogram_data.json" in zf.namelist():
+                    hist_data = json.loads(zf.read("histogram_data.json"))
+                    speeds = hist_data.get("speeds", [])
+                    areas = hist_data.get("areas", [])
+
                 base_name = os.path.splitext(uploaded_file.name)[0]
 
                 st.session_state.processing_result = {
@@ -267,6 +304,8 @@ if uploaded_file is not None:
                     "speed_hist_name": f"{base_name}_speed.png",
                     "area_hist": area_hist,
                     "area_hist_name": f"{base_name}_area.png",
+                    "speeds": speeds,
+                    "areas": areas,
                 }
                 progress.progress(100, text="Done!")
             else:
@@ -302,17 +341,64 @@ if st.session_state.processing_result is not None:
 
     # ── Tab: Histograms ──
     with tab_histograms:
+        speeds = res.get("speeds", [])
+        areas = res.get("areas", [])
         has_hists = res["speed_hist"] or res["area_hist"]
+
         if has_hists:
+            with st.expander("📐  X-axis range (leave empty for default)", expanded=False):
+                st.caption(
+                    "Set the X-axis range for each histogram. "
+                    "Leave any field empty to fall back to the auto-computed default."
+                )
+                range_cols = st.columns(4, gap="medium")
+                with range_cols[0]:
+                    speed_min = st.number_input(
+                        "Speed min", value=None, format="%.4f", key="speed_min"
+                    )
+                with range_cols[1]:
+                    speed_max = st.number_input(
+                        "Speed max", value=None, format="%.4f", key="speed_max"
+                    )
+                with range_cols[2]:
+                    area_min = st.number_input(
+                        "Area min", value=None, format="%.4f", key="area_min"
+                    )
+                with range_cols[3]:
+                    area_max = st.number_input(
+                        "Area max", value=None, format="%.4f", key="area_max"
+                    )
+
+            speed_img = res["speed_hist"]
+            area_img = res["area_hist"]
+            if speeds and (speed_min is not None or speed_max is not None):
+                speed_img = _render_histogram(
+                    speeds,
+                    color="blue",
+                    title="Speed histogram (top-20 longest-lived)",
+                    xlabel="Speed (pixels/frame)",
+                    x_min=speed_min,
+                    x_max=speed_max,
+                )
+            if areas and (area_min is not None or area_max is not None):
+                area_img = _render_histogram(
+                    areas,
+                    color="green",
+                    title="Area histogram (top-20 longest-lived)",
+                    xlabel="Area (pixels^2)",
+                    x_min=area_min,
+                    x_max=area_max,
+                )
+
             hist_cols = st.columns(2, gap="large")
-            if res["speed_hist"]:
+            if speed_img:
                 with hist_cols[0]:
                     st.markdown("**Speed histogram** — top-20 longest-lived bubbles")
-                    st.image(res["speed_hist"], width="stretch")
-            if res["area_hist"]:
+                    st.image(speed_img, width="stretch")
+            if area_img:
                 with hist_cols[1]:
                     st.markdown("**Area histogram** — top-20 longest-lived bubbles")
-                    st.image(res["area_hist"], width="stretch")
+                    st.image(area_img, width="stretch")
         else:
             st.info("No histograms available (not enough tracked bubbles).")
 
